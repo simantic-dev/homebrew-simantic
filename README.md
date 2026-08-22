@@ -1,69 +1,52 @@
 # homebrew-simantic
 
-Homebrew tap for the [Simantic](https://simantic.dev) CLI.
+Homebrew tap for the [Simantic](https://simantic.dev) CLI (`sim`).
 
 ```bash
 brew tap simantic-dev/simantic
 brew install simantic
 ```
 
-Then authenticate and fetch the simulators:
+Then sign in:
 
 ```bash
-simantic auth      # opens a browser; stores a token in ~/.sim_id
-simantic install   # downloads sim, pyrite, and analog-cli into ~/.simantic/bin
+sim login   # opens a browser
 ```
 
 ## What this tap installs
 
-`Formula/simantic.rb` is a Python virtualenv formula. It creates an isolated
-venv against Homebrew's own managed Python, installs the `simantic` PyPI
-package into it, and symlinks the `simantic` and `smtc` entry points into
-`$(brew --prefix)/bin`.
+`Formula/simantic.rb` fetches the prebuilt `sim` binary directly from the
+public release manifest and installs it into `$(brew --prefix)/bin` — no
+build step, since `sim` is closed-source. This is the same pattern other
+closed-source CLIs use on Homebrew (1Password's `op`, `flyctl`, `doppler`):
+a self-hosted tap that just downloads and installs a signed artifact.
 
-It deliberately does **not** ship the simulators themselves. `sim`, `pyrite`,
-and `analog-cli` are closed-source, account-gated downloads; they are fetched
-by `simantic install`, which is the same authenticated flow the `pip` install
-path uses. Nothing about that flow is reimplemented in Ruby.
+This is also why it's not in `homebrew-core` — that tap requires publicly
+buildable source. A self-hosted tap has no such requirement and needs no
+Apple Developer Program membership or code-signing work.
 
-This is also why the formula is not in `homebrew-core`: that tap requires
-publicly buildable source. A self-hosted tap has no such requirement, and
-needs no Apple Developer Program membership or code-signing work, because
-Homebrew is installing Python code rather than a downloaded Mach-O binary.
+Published platforms today: `osx-arm64` (Apple Silicon) and `linux-x64`.
+Intel Mac and other Linux architectures have no published build yet.
 
-## Status — not usable yet
+## Status
 
-The `simantic` package is **not published to PyPI**. `pypi.org/pypi/simantic/json`
-and the TestPyPI equivalent both return 404. The formula's `url` and `sha256`
-are placeholders and `brew install` will fail until the package ships. See the
-comment at the top of `Formula/simantic.rb`, and `simantic-py/PUBLISHING.md`
-for the publishing steps.
+Live. The formula's `url`/`sha256` are pinned to the real `0.5.2` artifacts
+from `releases/cli/latest.json`, verified by downloading and running `sim
+--help` locally before publishing this tap.
 
-## Who has to do what
+## Bumping the version
 
-These steps need a human with the accounts; they are deliberately not
-automated and were not performed by whoever scaffolded this directory:
-
-1. Publish `simantic` to PyPI (see `simantic-py/PUBLISHING.md`).
-2. Update `Formula/simantic.rb` with the real sdist url and sha256 — the
-   version, the url, and the hash all change together.
-3. Create the GitHub repository **`simantic-dev/homebrew-simantic`** (the
-   `homebrew-` prefix is what makes `brew tap simantic-dev/simantic` resolve)
-   and push this directory to it as the repository root, so the formula lands
-   at `Formula/simantic.rb`.
-4. Verify on a clean machine: `brew tap simantic-dev/simantic && brew install simantic && brew test simantic`.
-
-## Maintaining the formula
-
-The `pyyaml` dependency is pinned as a `resource` block, which is how Homebrew
-vendors Python dependencies. Regenerate it after any dependency change:
+The release manifest is public and unauthenticated:
 
 ```bash
-brew update-python-resources Formula/simantic.rb
+curl -s https://drjdhqfvrttolueolzif.supabase.co/storage/v1/object/public/releases/cli/latest.json
 ```
 
-Bump the package version with:
+Update `version`, both `url`s, and both `sha256`s in `Formula/simantic.rb`
+from that manifest, then:
 
 ```bash
-brew bump-formula-pr --url=<new pypi sdist url> simantic
+brew audit --strict simantic
+brew install --build-from-source simantic  # sanity check locally
+brew test simantic
 ```
